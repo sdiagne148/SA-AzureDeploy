@@ -1,0 +1,84 @@
+# This is a basic workflow to help you get started with Actions
+
+name: Deploy Azure Function
+
+# Controls when the action will run. 
+on:
+  # Triggers the workflow on push or pull request events but only for the master branch
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+env:
+  FUNCTION_NAME: pnptutorialpractice    # This name needs to be globally unique
+  SCRIPT_PATH: '.'      # set this to the path where your PowerShell code is stored.
+  RESOURCE_GROUP: pnptutorialpractice
+  LOCATION: 'Canada East'
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v2
+
+      # Runs a single command using the runners shell
+      #- name: Run a one-line script
+      # run: echo Hello, world!
+
+      # Runs a set of commands using the runners shell
+      #- name: Run a multi-line script
+       # run: |
+          #echo Add other actions to build,
+          #echo test, and deploy your project
+      #connect to azure
+      - name: Azure Login
+        uses: Azure/login@v1
+        with:
+          # Paste output of `az ad sp create-for-rbac` as value of secret variable: AZURE_CREDENTIALS
+          creds: ${{secrets.AZURE_CREDS}}
+          # Set this value to true to enable Azure PowerShell Login in addition to Az CLI login
+          enable-AzPSSession: true # optional
+          # Name of the environment. Supported values are azurecloud, azurestack, azureusgovernment, azurechinacloud, azuregermancloud. Default being azurecloud
+          #environment: # optional, default is azurecloud
+          # Set this value to true to enable support for accessing tenants without subscriptions
+          #allow-no-subscriptions: # optional
+        # Deploy the Function
+      - name: Azure PowerShell Action
+        uses: Azure/powershell@v1
+        with:
+          # Specify the Az PowerShell script here.
+          inlineScript: 
+            .\deployFA.ps1 -FunctionName ${{ env.FUNCTION_NAME }} -FunctionResourceGroup ${{ env.RESOURCE_GROUP }} -Location ${{ env.LOCATION }}
+          # Azure PS version to be used to execute the script, example: 1.8.0, 2.8.0, 3.4.0. To use the latest version, specify "latest".
+          azPSVersion: latest
+          # Select the value of the ErrorActionPreference variable for executing the script. Options: stop, continue, silentlyContinue. Default is Stop.
+          #errorActionPreference: # optional, default is Stop
+          # If this is true, this task will fail if any errors are written to the error pipeline, or if any data is written to the Standard Error stream.
+          #failOnStandardError: # optional, default is false
+      # Get the publish profile
+      - name: Azure App Service Publish Profile
+        uses: aliencube/publish-profile-actions@v1.2.0
+        id: publishprofile
+        with:
+          # Resource group name.
+          resourceGroupName: ${{ env.RESOURCE_GROUP }}
+          # App instance name.
+          appName: ${{ env.FUNCTION_NAME }}
+      # Deploy the Code
+      - name: Azure Functions Action
+        uses: Azure/functions-action@v1.1.8
+        with:
+          # Name of the Azure Function App
+          app-name: ${{ env.FUNCTION_NAME }}
+          # Path to package or folder. *.zip or a folder to deploy
+          package: ${{ env.SCRIPT_PATH }}
+          # Publish profile (*.publishsettings) file contents with web deploy secrets
+          publish-profile: ${{ steps.publishprofile.outputs.profile }} 
